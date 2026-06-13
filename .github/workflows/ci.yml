@@ -98,9 +98,15 @@ jobs:
 
             cd "$APP_DIR"
 
+            # Preserve .env (not in git, lives only on server)
+            cp .env /tmp/.env.bak 2>/dev/null || true
+
             # Pull latest code
             git fetch origin main
             git reset --hard origin/main
+
+            # Restore .env
+            cp /tmp/.env.bak .env 2>/dev/null || true
 
             # Rebuild and restart container (keep data volume)
             docker compose down
