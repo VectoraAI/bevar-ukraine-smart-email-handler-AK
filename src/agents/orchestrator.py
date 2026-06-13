@@ -16,6 +16,7 @@ from src.models.agents import (
     AggregationResult,
     FinalResponse,
     IntentType,
+    QueryPlan,
     SearchResult,
 )
 from src.privacy.audit import safe_log_query
@@ -83,13 +84,17 @@ class Orchestrator:
         # 4. Query Planner
         plan = build_query_plan(intent)
 
-        # 5. Execute search/aggregation
+        # 5. Execute search/aggregation (with multi-step support)
         search_result: SearchResult | None = None
         aggregation: AggregationResult | None = None
 
         effective_page_size = plan.result_limit if plan.result_limit > 0 else page_size
 
-        if plan.needs_aggregation:
+        if intent.intent_type == IntentType.THREAD_VIEW:
+            # Multi-step: find anchor email(s), then load full thread
+            search_result = self._resolve_thread_view(plan, page, effective_page_size)
+            logger.info("thread_view_done", total=search_result.total_count)
+        elif plan.needs_aggregation:
             aggregation = self._aggregation.aggregate(plan)
             logger.info("aggregation_done", type=plan.aggregation_type, data_points=len(aggregation.data))
         else:
@@ -104,7 +109,7 @@ class Orchestrator:
             search_result=search_result,
             aggregation=aggregation,
             page=page,
-            page_size=effective_page_size,
+            page_size=max(effective_page_size, search_result.total_count if search_result else 0),
             total_pages=total_pages,
         )
 
@@ -151,6 +156,55 @@ class Orchestrator:
 
     def get_emails_over_time(self) -> AggregationResult:
         return self._aggregation.get_emails_over_time()
+
+    def _resolve_thread_view(
+        self, plan: QueryPlan, page: int, page_size: int
+    ) -> SearchResult:
+        """Multi-step: find anchor email, then load full thread."""
+        import time
+
+        start = time.monotonic()
+
+        # Step 1: Find the anchor email (e.g., the latest email matching filters)
+        anchor_result = self._search.search(plan, page=1, page_size=1)
+
+        if not anchor_result.emails:
+            return anchor_result
+
+        anchor = anchor_result.emails[0]
+        thread_id = anchor.get("thread_id", "")
+
+        if not thread_id:
+            # No thread — return just this email
+            return anchor_result
+
+        # Step 2: Load the full thread
+        logger.info("thread_resolve", thread_id=thread_id)
+        thread_emails = self._data_access.get_thread(thread_id)
+        elapsed = (time.monotonic() - start) * 1000
+
+        # Convert full email dicts to search-result format (with snippets)
+        emails: list[dict[str, Any]] = []
+        for e in thread_emails:
+            emails.append({
+                "message_id": e.get("message_id", ""),
+                "date_utc": e.get("date_utc"),
+                "from_address": e.get("from_address", ""),
+                "from_name": e.get("from_name", ""),
+                "to_addresses": e.get("to_addresses", ""),
+                "subject": e.get("subject", ""),
+                "has_attachments": e.get("has_attachments", False),
+                "attachment_count": e.get("attachment_count", 0),
+                "size_bytes": e.get("size_bytes", 0),
+                "thread_id": e.get("thread_id", ""),
+                "snippet": (e.get("body_text") or "")[:200],
+            })
+
+        return SearchResult(
+            emails=emails,
+            total_count=len(emails),
+            query_time_ms=elapsed,
+        )
 
     def _save_to_history(self, session_id: str, content: str, role: str) -> None:
         if session_id not in self._sessions:

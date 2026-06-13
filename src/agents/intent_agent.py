@@ -46,9 +46,16 @@ CRITICAL rules for "limit":
 
 CRITICAL rules for "keywords":
 - keywords are ONLY for full-text search in email content (subject, body, sender).
-- Do NOT put navigational words like "последнее", "покажи", "show", "latest", "newest", "first", "контент" into keywords.
+- Do NOT put navigational words like "последнее", "покажи", "show", "latest", "newest", "first", "контент", "цепочка", "thread", "переписка" into keywords.
 - Only put actual search terms that should match email text: names, topics, organizations, email addresses.
 - If the user just wants to browse/navigate (e.g., "show last email", "покажи последнее письмо"), set keywords to an EMPTY list [].
+
+CRITICAL rules for "intent_type":
+- "thread_view" — when user asks for a thread/chain/conversation/цепочка/переписка/ланцюжок. Examples: "покажи цепочку последнего письма", "show thread of the last email", "вся переписка с...". The system will automatically find the anchor email first and then load the full thread.
+- "search_emails" — searching/browsing emails
+- "specific_email" — viewing a single specific email by ID or unique identifier
+- "aggregate_stats" — counts, top senders, statistics
+- "trend_analysis" — trends over time
 
 CRITICAL rules for sort_order:
 - "last/latest/newest/последнее/останнє" → sort_order = "date_desc"
