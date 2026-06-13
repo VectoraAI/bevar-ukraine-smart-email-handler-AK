@@ -18,7 +18,9 @@ class AggregationAgent:
         raw_data = self._data.execute_aggregation(plan)
         intent = plan.intent
 
-        if plan.aggregation_type == "time_series":
+        if plan.aggregation_type == "contacts":
+            return self._build_contacts(raw_data, intent)
+        elif plan.aggregation_type == "time_series":
             return self._build_time_series(raw_data, intent)
         elif plan.aggregation_type == "count_group":
             return self._build_grouped_count(raw_data, intent, plan.group_by)
@@ -108,6 +110,14 @@ class AggregationAgent:
             labels=[str(r.get("label", "")) for r in raw_data],
             values=[float(r.get("count", 0)) for r in raw_data],
             data=raw_data,
+        )
+
+    def _build_contacts(self, raw_data: list[dict[str, Any]], intent: Any) -> AggregationResult:
+        return AggregationResult(
+            title="Contacts from Email Archive",
+            description=f"Unique contacts extracted from archive: {intent.raw_query if intent else ''}",
+            data=raw_data,
+            summary={"total_contacts": len(raw_data)},
         )
 
     def _build_summary(self, raw_data: list[dict[str, Any]], intent: Any) -> AggregationResult:

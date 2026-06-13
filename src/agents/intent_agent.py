@@ -51,11 +51,13 @@ CRITICAL rules for "keywords":
 - If the user just wants to browse/navigate (e.g., "show last email", "покажи последнее письмо"), set keywords to an EMPTY list [].
 
 CRITICAL rules for "intent_type":
-- "thread_view" — when user asks for a thread/chain/conversation/цепочка/переписка/ланцюжок. Examples: "покажи цепочку последнего письма", "show thread of the last email", "вся переписка с...". The system will automatically find the anchor email first and then load the full thread.
-- "search_emails" — searching/browsing emails
+- "thread_view" — when user asks for a thread/chain/conversation/цепочка/переписка/ланцюжок of a SPECIFIC email. Examples: "покажи цепочку последнего письма", "show thread of the last email". The system will automatically find the anchor email first and then load the full thread.
+- "search_emails" — searching/browsing emails, listing all emails, showing contacts table
 - "specific_email" — viewing a single specific email by ID or unique identifier
-- "aggregate_stats" — counts, top senders, statistics
+- "aggregate_stats" — counts, top senders, statistics, contact lists, extracting all unique senders/recipients. Use this when user asks for "all contacts", "список контактов", "таблица отправителей", "unique senders", etc.
 - "trend_analysis" — trends over time
+- "export" — when user explicitly asks to download/export/скачать data as CSV/XLSX/file. The system supports CSV export.
+- NEVER classify a valid archive query as "general_question". Only use "general_question" for queries truly unrelated to emails (e.g., "what's the weather").
 
 CRITICAL rules for sort_order:
 - "last/latest/newest/последнее/останнє" → sort_order = "date_desc"

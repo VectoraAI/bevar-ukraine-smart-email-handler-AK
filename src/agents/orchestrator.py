@@ -62,13 +62,40 @@ class Orchestrator:
         intent = analyze_intent(user_query, conversation_history=history if history else None)
         intent.raw_query = user_query
 
-        # 2. Guard: reject out-of-domain
+        # 2. Guard: reject out-of-domain (but be lenient)
         if intent.intent_type == IntentType.GENERAL_QUESTION and not intent.keywords:
-            return FinalResponse(
-                text="I can only help with questions about the Bevar Ukraine email archive. "
-                "Please ask about emails, senders, topics, or statistics from our mailbox.",
-                correlation_id=correlation_id,
-            )
+            # Re-check: if query mentions emails/archive/letters, treat as search
+            query_lower = user_query.lower()
+            archive_words = [
+                "письм",
+                "email",
+                "mail",
+                "архив",
+                "archive",
+                "контакт",
+                "contact",
+                "отправ",
+                "send",
+                "получ",
+                "receiv",
+                "переписк",
+                "скачать",
+                "export",
+                "xlsx",
+                "csv",
+                "таблиц",
+                "table",
+            ]
+            if any(w in query_lower for w in archive_words):
+                intent.intent_type = IntentType.SEARCH_EMAILS
+                intent.confidence = 0.5
+                logger.info("intent_override", from_type="general_question", to_type="search_emails")
+            else:
+                return FinalResponse(
+                    text="I can only help with questions about the Bevar Ukraine email archive. "
+                    "Please ask about emails, senders, topics, or statistics from our mailbox.",
+                    correlation_id=correlation_id,
+                )
 
         # 3. Clarification if needed
         if intent.needs_clarification:

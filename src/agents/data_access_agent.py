@@ -60,6 +60,23 @@ class DataAccessAgent:
             if plan.sql_params:
                 params = list(plan.sql_params.values())
 
+        if plan.aggregation_type == "contacts":
+            sql = f"""
+                SELECT
+                    from_address as email,
+                    MAX(from_name) as name,
+                    COUNT(*) as email_count,
+                    MIN(date_utc) as first_seen,
+                    MAX(date_utc) as last_seen,
+                    STRING_AGG(DISTINCT LEFT(subject, 60), ' | ' ORDER BY LEFT(subject, 60)) as sample_subjects
+                FROM emails
+                {where_sql}
+                GROUP BY from_address
+                ORDER BY email_count DESC
+                LIMIT 200
+            """
+            return self._db.aggregate_query(sql, params if params else None)
+
         if plan.aggregation_type == "time_series":
             sql = f"""
                 SELECT

@@ -73,9 +73,22 @@ def build_query_plan(intent: QueryIntent) -> QueryPlan:
     needs_agg = intent.intent_type in (IntentType.AGGREGATE_STATS, IntentType.TREND_ANALYSIS)
     agg_type = ""
     group_by = ""
+    raw_query_lower = intent.raw_query.lower()
+
+    # Detect contacts extraction (requires "table/list/all" + contact-related word)
+    contact_words = ["контакт", "contact", "адрес"]
+    list_words = ["таблиц", "table", "список", "list", "все ", "всех ", "all ", "полн"]
+    is_contacts_query = any(w in raw_query_lower for w in contact_words) and any(
+        w in raw_query_lower for w in list_words
+    )
+
     if intent.intent_type == IntentType.AGGREGATE_STATS:
-        agg_type = "count_group"
-        group_by = "from_address"
+        if is_contacts_query:
+            agg_type = "contacts"
+            group_by = "from_address"
+        else:
+            agg_type = "count_group"
+            group_by = "from_address"
     elif intent.intent_type == IntentType.TREND_ANALYSIS:
         agg_type = "time_series"
         group_by = "month"
