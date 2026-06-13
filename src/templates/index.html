@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bevar Ukraine - Email Archive</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        :root { --bu-blue: #0057B7; --bu-yellow: #FFD700; }
+        .navbar { background: linear-gradient(135deg, var(--bu-blue), #003d80) !important; }
+        .btn-bu { background-color: var(--bu-blue); border-color: var(--bu-blue); color: #fff; }
+        .btn-bu:hover { background-color: #003d80; border-color: #003d80; color: #fff; }
+        .stat-card { border-left: 4px solid var(--bu-blue); }
+        .stat-card .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--bu-blue); }
+        #queryInput { border-radius: 25px; padding: 12px 24px; font-size: 1.1rem; }
+        .email-detail-modal .modal-body { max-height: 70vh; overflow-y: auto; }
+        .typing-indicator { display: none; }
+        .typing-indicator.active { display: inline-flex; gap: 4px; align-items: center; }
+        .typing-indicator span { width: 8px; height: 8px; background: var(--bu-blue);
+            border-radius: 50%; animation: blink 1.4s infinite; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0%,80%,100% { opacity: 0.3; } 40% { opacity: 1; } }
+        .clarification-card { background: #fff3cd; border: 1px solid #ffc107; border-radius: 12px; }
+        .chart-container { position: relative; height: 350px; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="/">
+                <i class="bi bi-envelope-heart me-2"></i>
+                <span>Bevar Ukraine <small class="opacity-75">Email Archive</small></span>
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="badge bg-light text-dark me-2">
+                    <i class="bi bi-database me-1"></i>
+                    <span id="totalEmails">{{ stats.get('total_emails', 0) }}</span> emails
+                </span>
+                <button class="btn btn-outline-light btn-sm" onclick="showStats()">
+                    <i class="bi bi-graph-up"></i> Stats
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <!-- Search -->
+        <div class="row justify-content-center mb-4">
+            <div class="col-lg-8">
+                <div class="input-group">
+                    <input type="text" id="queryInput" class="form-control"
+                           placeholder="Ask about the email archive... (e.g., 'Show all emails from GlobalGiving in 2024')"
+                           autofocus>
+                    <button class="btn btn-bu px-4" onclick="submitQuery()" id="searchBtn">
+                        <i class="bi bi-search me-1"></i> Search
+                    </button>
+                </div>
+                <div class="mt-2 text-muted small text-center">
+                    <span class="typing-indicator" id="typingIndicator">
+                        <span></span><span></span><span></span>
+                        <span class="ms-2">Analyzing...</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Stats Cards -->
+        <div class="row mb-4" id="statsRow">
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body text-center">
+                        <div class="stat-value">{{ stats.get('total_emails', 0) }}</div>
+                        <div class="text-muted">Total Emails</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body text-center">
+                        <div class="stat-value">{{ stats.get('unique_senders', 0) }}</div>
+                        <div class="text-muted">Unique Senders</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body text-center">
+                        <div class="stat-value">{{ stats.get('with_attachments', 0) }}</div>
+                        <div class="text-muted">With Attachments</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card stat-card h-100">
+                    <div class="card-body text-center">
+                        <div class="stat-value">{{ stats.get('earliest_date', '-')[:10] if stats.get('earliest_date') else '-' }}</div>
+                        <div class="text-muted">Earliest Email</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Response Area -->
+        <div id="responseArea" class="row" style="display:none;">
+            <!-- Text Response -->
+            <div class="col-12 mb-3">
+                <div class="card fade-in">
+                    <div class="card-body">
+                        <div id="responseText"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Cards from Query -->
+            <div id="queryStatsCards" class="col-12 mb-3" style="display:none;"></div>
+
+            <!-- Charts -->
+            <div id="chartsArea" class="col-12 mb-3" style="display:none;"></div>
+
+            <!-- Table -->
+            <div id="tableArea" class="col-12 mb-3" style="display:none;">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Results</span>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="exportCSV()">
+                            <i class="bi bi-download me-1"></i>Export CSV
+                        </button>
+                    </div>
+                    <div class="card-body p-0" id="tableContent"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clarification Area -->
+        <div id="clarificationArea" class="row justify-content-center" style="display:none;">
+            <div class="col-lg-8">
+                <div class="card clarification-card fade-in p-4">
+                    <h5><i class="bi bi-question-circle me-2"></i>Could you clarify?</h5>
+                    <div id="clarificationQuestions"></div>
+                    <div class="mt-3">
+                        <input type="text" class="form-control" id="clarificationInput"
+                               placeholder="Your answer...">
+                        <button class="btn btn-bu mt-2" onclick="submitClarification()">
+                            <i class="bi bi-send me-1"></i>Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Detail Modal -->
+    <div class="modal fade email-detail-modal" id="emailModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="emailModalTitle">Email Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="emailModalBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="text-center py-3 text-muted small">
+        Bevar Ukraine &copy; 2024-2026 | Internal Email Archive Tool
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script>
+        let sessionId = crypto.randomUUID();
+        let currentQuery = '';
+        let currentPage = 1;
+        const pageSize = 50;
+        let chartInstances = [];
+
+        document.getElementById('queryInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') submitQuery();
+        });
+
+        async function submitQuery(page) {
+            const input = document.getElementById('queryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            currentQuery = query;
+            currentPage = page || 1;
+            setLoading(true);
+            hideAll();
+
+            try {
+                const resp = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: query,
+                        session_id: sessionId,
+                        page: currentPage,
+                        page_size: pageSize
+                    })
+                });
+                const data = await resp.json();
+                renderResponse(data);
+            } catch (err) {
+                showError('Connection error. Please try again.');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function renderResponse(data) {
+            if (data.error) { showError(data.error); return; }
+
+            if (data.needs_clarification) {
+                renderClarification(data.clarification_questions);
+                return;
+            }
+
+            const area = document.getElementById('responseArea');
+            area.style.display = '';
+
+            // Text
+            if (data.text) {
+                document.getElementById('responseText').innerHTML =
+                    '<p class="mb-0">' + escapeHtml(data.text).replace(/\n/g, '<br>') + '</p>';
+            }
+
+            const pres = data.presentation;
+            if (!pres) return;
+
+            // Stats cards
+            if (pres.stats_cards && pres.stats_cards.length) {
+                const container = document.getElementById('queryStatsCards');
+                container.style.display = '';
+                container.innerHTML = '<div class="row">' + pres.stats_cards.map(c =>
+                    `<div class="col-auto mb-2"><div class="card stat-card"><div class="card-body py-2 px-3">
+                        <span class="fw-bold text-primary">${escapeHtml(c.value)}</span>
+                        <span class="text-muted ms-2 small">${escapeHtml(c.label)}</span>
+                    </div></div></div>`
+                ).join('') + '</div>';
+            }
+
+            // Charts
+            chartInstances.forEach(c => c.destroy());
+            chartInstances = [];
+            if (pres.chart_configs && pres.chart_configs.length) {
+                const chartsDiv = document.getElementById('chartsArea');
+                chartsDiv.style.display = '';
+                chartsDiv.innerHTML = pres.chart_configs.map((_, i) =>
+                    `<div class="card mb-3"><div class="card-body chart-container">
+                        <canvas id="chart${i}"></canvas>
+                    </div></div>`
+                ).join('');
+                pres.chart_configs.forEach((cfg, i) => {
+                    const ctx = document.getElementById(`chart${i}`).getContext('2d');
+                    chartInstances.push(new Chart(ctx, cfg));
+                });
+            }
+
+            // Table
+            if (pres.table_html) {
+                document.getElementById('tableArea').style.display = '';
+                document.getElementById('tableContent').innerHTML = pres.table_html;
+                bindTableEvents();
+            }
+        }
+
+        function renderClarification(questions) {
+            const area = document.getElementById('clarificationArea');
+            area.style.display = '';
+            const qDiv = document.getElementById('clarificationQuestions');
+            qDiv.innerHTML = questions.map(q =>
+                `<p class="mb-2"><i class="bi bi-arrow-right-circle text-warning me-2"></i>${escapeHtml(q)}</p>`
+            ).join('');
+            document.getElementById('clarificationInput').focus();
+        }
+
+        function submitClarification() {
+            const input = document.getElementById('clarificationInput');
+            const answer = input.value.trim();
+            if (!answer) return;
+            document.getElementById('queryInput').value = answer;
+            document.getElementById('clarificationArea').style.display = 'none';
+            submitQuery();
+        }
+
+        function bindTableEvents() {
+            document.querySelectorAll('.view-email').forEach(btn => {
+                btn.addEventListener('click', async function(e) {
+                    e.preventDefault();
+                    const mid = this.dataset.messageId;
+                    const resp = await fetch(`/api/email/${encodeURIComponent(mid)}`);
+                    const data = await resp.json();
+                    if (data.email) showEmailModal(data.email);
+                });
+            });
+
+            document.querySelectorAll('.view-thread').forEach(btn => {
+                btn.addEventListener('click', async function(e) {
+                    e.preventDefault();
+                    const tid = this.dataset.threadId;
+                    const resp = await fetch(`/api/thread/${encodeURIComponent(tid)}`);
+                    const data = await resp.json();
+                    if (data.emails) showThreadModal(data.emails);
+                });
+            });
+
+            document.querySelectorAll('.page-link[data-page]').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const page = parseInt(this.dataset.page);
+                    if (page > 0) submitQuery(page);
+                });
+            });
+
+            // Column sorting
+            document.querySelectorAll('th[data-sortable]').forEach(th => {
+                th.style.cursor = 'pointer';
+                th.addEventListener('click', function() {
+                    sortTable(this);
+                });
+            });
+        }
+
+        function sortTable(th) {
+            const table = th.closest('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const idx = Array.from(th.parentNode.children).indexOf(th);
+            const asc = th.dataset.sortDir !== 'asc';
+            th.dataset.sortDir = asc ? 'asc' : 'desc';
+
+            rows.sort((a, b) => {
+                const at = a.children[idx]?.textContent?.trim() || '';
+                const bt = b.children[idx]?.textContent?.trim() || '';
+                return asc ? at.localeCompare(bt) : bt.localeCompare(at);
+            });
+            rows.forEach(r => tbody.appendChild(r));
+        }
+
+        function showEmailModal(email) {
+            document.getElementById('emailModalTitle').textContent = email.subject || '(no subject)';
+            document.getElementById('emailModalBody').innerHTML = `
+                <dl class="row mb-3">
+                    <dt class="col-sm-2">From</dt><dd class="col-sm-10">${escapeHtml(email.from_name || '')} &lt;${escapeHtml(email.from_address || '')}&gt;</dd>
+                    <dt class="col-sm-2">To</dt><dd class="col-sm-10">${escapeHtml(String(email.to_addresses || ''))}</dd>
+                    <dt class="col-sm-2">Date</dt><dd class="col-sm-10">${escapeHtml(String(email.date_utc || ''))}</dd>
+                    <dt class="col-sm-2">Subject</dt><dd class="col-sm-10">${escapeHtml(email.subject || '')}</dd>
+                    ${email.cc_addresses && email.cc_addresses !== '[]' ? `<dt class="col-sm-2">CC</dt><dd class="col-sm-10">${escapeHtml(String(email.cc_addresses))}</dd>` : ''}
+                    ${email.has_attachments ? `<dt class="col-sm-2">Attachments</dt><dd class="col-sm-10">${email.attachment_count} file(s)</dd>` : ''}
+                </dl>
+                <hr>
+                <div class="email-body">${email.body_html || ('<pre class="text-wrap">' + escapeHtml(email.body_text || '(empty)') + '</pre>')}</div>
+            `;
+            new bootstrap.Modal(document.getElementById('emailModal')).show();
+        }
+
+        function showThreadModal(emails) {
+            document.getElementById('emailModalTitle').textContent = `Thread (${emails.length} emails)`;
+            document.getElementById('emailModalBody').innerHTML = emails.map(e => `
+                <div class="card mb-2">
+                    <div class="card-header py-1 px-2 small">
+                        <strong>${escapeHtml(e.from_name || e.from_address || '')}</strong>
+                        <span class="float-end text-muted">${String(e.date_utc || '').slice(0,16)}</span>
+                    </div>
+                    <div class="card-body py-2 px-3">
+                        <strong>${escapeHtml(e.subject || '')}</strong>
+                        <p class="mt-1 mb-0 small">${escapeHtml((e.body_text || '').slice(0, 500))}</p>
+                    </div>
+                </div>
+            `).join('');
+            new bootstrap.Modal(document.getElementById('emailModal')).show();
+        }
+
+        async function showStats() {
+            const resp = await fetch('/api/timeline');
+            const data = await resp.json();
+            document.getElementById('queryInput').value = 'Show email statistics and timeline';
+            submitQuery();
+        }
+
+        function exportCSV() {
+            window.location.href = '/api/export/csv?q=' + encodeURIComponent(currentQuery);
+        }
+
+        function setLoading(state) {
+            const indicator = document.getElementById('typingIndicator');
+            const btn = document.getElementById('searchBtn');
+            indicator.classList.toggle('active', state);
+            btn.disabled = state;
+        }
+
+        function hideAll() {
+            document.getElementById('responseArea').style.display = 'none';
+            document.getElementById('clarificationArea').style.display = 'none';
+            document.getElementById('queryStatsCards').style.display = 'none';
+            document.getElementById('chartsArea').style.display = 'none';
+            document.getElementById('tableArea').style.display = 'none';
+        }
+
+        function showError(msg) {
+            document.getElementById('responseArea').style.display = '';
+            document.getElementById('responseText').innerHTML =
+                `<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-2"></i>${escapeHtml(msg)}</div>`;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
