@@ -157,9 +157,7 @@ class Orchestrator:
     def get_emails_over_time(self) -> AggregationResult:
         return self._aggregation.get_emails_over_time()
 
-    def _resolve_thread_view(
-        self, plan: QueryPlan, page: int, page_size: int
-    ) -> SearchResult:
+    def _resolve_thread_view(self, plan: QueryPlan, page: int, page_size: int) -> SearchResult:
         """Multi-step: find anchor email, then load full thread."""
         import time
 
@@ -186,19 +184,21 @@ class Orchestrator:
         # Convert full email dicts to search-result format (with snippets)
         emails: list[dict[str, Any]] = []
         for e in thread_emails:
-            emails.append({
-                "message_id": e.get("message_id", ""),
-                "date_utc": e.get("date_utc"),
-                "from_address": e.get("from_address", ""),
-                "from_name": e.get("from_name", ""),
-                "to_addresses": e.get("to_addresses", ""),
-                "subject": e.get("subject", ""),
-                "has_attachments": e.get("has_attachments", False),
-                "attachment_count": e.get("attachment_count", 0),
-                "size_bytes": e.get("size_bytes", 0),
-                "thread_id": e.get("thread_id", ""),
-                "snippet": (e.get("body_text") or "")[:200],
-            })
+            emails.append(
+                {
+                    "message_id": e.get("message_id", ""),
+                    "date_utc": e.get("date_utc"),
+                    "from_address": e.get("from_address", ""),
+                    "from_name": e.get("from_name", ""),
+                    "to_addresses": e.get("to_addresses", ""),
+                    "subject": e.get("subject", ""),
+                    "has_attachments": e.get("has_attachments", False),
+                    "attachment_count": e.get("attachment_count", 0),
+                    "size_bytes": e.get("size_bytes", 0),
+                    "thread_id": e.get("thread_id", ""),
+                    "snippet": (e.get("body_text") or "")[:200],
+                }
+            )
 
         return SearchResult(
             emails=emails,
