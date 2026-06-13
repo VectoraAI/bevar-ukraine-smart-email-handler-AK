@@ -78,15 +78,43 @@ jobs:
     needs: docker-build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - name: Deploy to Lightsail via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -e
 
-      - name: Build and tag Docker image
-        run: |
-          docker build -t bevar-email-handler:latest -t bevar-email-handler:${{ github.sha }} .
+            APP_DIR=~/bevar-ukraine-smart-email-handler-AK
 
-      # Add registry push and deployment steps as needed
-      # Example:
-      # - name: Push to registry
-      #   run: |
-      #     docker tag bevar-email-handler:${{ github.sha }} ${{ secrets.REGISTRY }}/bevar-email-handler:${{ github.sha }}
-      #     docker push ${{ secrets.REGISTRY }}/bevar-email-handler:${{ github.sha }}
+            # First deploy: clone repo
+            if [ ! -d "$APP_DIR" ]; then
+              git clone git@github.com:VectoraAI/bevar-ukraine-smart-email-handler-AK.git "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+
+            # Pull latest code
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Rebuild and restart container (keep data volume)
+            docker compose down
+            docker compose up -d --build
+
+            # Wait for health check
+            echo "Waiting for app to start..."
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then
+                echo "App is healthy!"
+                exit 0
+              fi
+              sleep 2
+            done
+
+            echo "Health check failed after 60s"
+            docker compose logs --tail=50
+            exit 1
