@@ -25,8 +25,9 @@ You MUST respond with valid JSON matching this schema:
   "language_filter": "string or null",
   "message_id_filter": "string or null",
   "sort_order": "date_desc|date_asc|relevance",
-  "needs_clarification": true/false,
-  "clarification_questions": ["question1", "question2"],
+  "limit": null,
+  "needs_clarification": false,
+  "clarification_questions": [],
   "confidence": 0.0-1.0
 }
 
@@ -37,7 +38,23 @@ Rules:
 - For statistical/aggregate queries (counts, top senders, trends), use "aggregate_stats" or "trend_analysis".
 - For searching specific emails, use "search_emails".
 - Extract email addresses, names, and keywords carefully.
-- Respond ONLY with the JSON object, no extra text."""
+
+CRITICAL rules for "limit":
+- When user asks for "the last email", "latest email", "последнее письмо", "newest email", "first email", etc. — set limit to 1 (or the number they specify, e.g., "last 5 emails" → limit=5).
+- When user says "last 10", "покажи 3 письма", etc. — set limit to that number.
+- When not specified, set limit to null.
+
+CRITICAL rules for "keywords":
+- keywords are ONLY for full-text search in email content (subject, body, sender).
+- Do NOT put navigational words like "последнее", "покажи", "show", "latest", "newest", "first", "контент" into keywords.
+- Only put actual search terms that should match email text: names, topics, organizations, email addresses.
+- If the user just wants to browse/navigate (e.g., "show last email", "покажи последнее письмо"), set keywords to an EMPTY list [].
+
+CRITICAL rules for sort_order:
+- "last/latest/newest/последнее/останнє" → sort_order = "date_desc"
+- "first/oldest/earliest/первое/перше" → sort_order = "date_asc"
+
+Respond ONLY with the JSON object, no extra text."""
 
 
 def analyze_intent(user_query: str, conversation_history: list[dict[str, str]] | None = None) -> QueryIntent:

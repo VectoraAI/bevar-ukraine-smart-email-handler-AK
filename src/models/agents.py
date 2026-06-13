@@ -46,6 +46,7 @@ class QueryIntent(BaseModel):
     clarification_questions: list[str] = Field(default_factory=list)
     raw_query: str = ""
     confidence: float = 1.0
+    limit: int | None = None
 
 
 class QueryPlan(BaseModel):
@@ -59,6 +60,7 @@ class QueryPlan(BaseModel):
     aggregation_type: str = ""
     group_by: str = ""
     sort_clause: str = "date_utc DESC"
+    result_limit: int = 0
     intent: QueryIntent | None = None
 
 

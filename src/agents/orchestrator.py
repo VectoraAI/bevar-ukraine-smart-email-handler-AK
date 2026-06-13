@@ -87,22 +87,24 @@ class Orchestrator:
         search_result: SearchResult | None = None
         aggregation: AggregationResult | None = None
 
+        effective_page_size = plan.result_limit if plan.result_limit > 0 else page_size
+
         if plan.needs_aggregation:
             aggregation = self._aggregation.aggregate(plan)
             logger.info("aggregation_done", type=plan.aggregation_type, data_points=len(aggregation.data))
         else:
-            search_result = self._search.search(plan, page=page, page_size=page_size)
+            search_result = self._search.search(plan, page=page, page_size=effective_page_size)
             logger.info("search_done", total=search_result.total_count)
 
         # 6. Presentation
         total_pages = 1
         if search_result:
-            total_pages = max(1, (search_result.total_count + page_size - 1) // page_size)
+            total_pages = max(1, (search_result.total_count + effective_page_size - 1) // effective_page_size)
         presentation = build_presentation(
             search_result=search_result,
             aggregation=aggregation,
             page=page,
-            page_size=page_size,
+            page_size=effective_page_size,
             total_pages=total_pages,
         )
 

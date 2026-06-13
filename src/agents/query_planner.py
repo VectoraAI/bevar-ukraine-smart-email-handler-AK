@@ -80,6 +80,8 @@ def build_query_plan(intent: QueryIntent) -> QueryPlan:
         agg_type = "time_series"
         group_by = "month"
 
+    result_limit = intent.limit or 0
+
     plan = QueryPlan(
         search_mode=search_mode,
         fts_query=fts_query,
@@ -89,6 +91,7 @@ def build_query_plan(intent: QueryIntent) -> QueryPlan:
         aggregation_type=agg_type,
         group_by=group_by,
         sort_clause=sort_clause,
+        result_limit=result_limit,
         intent=intent,
     )
 
