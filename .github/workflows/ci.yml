@@ -8,6 +8,7 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   lint-and-type-check:
@@ -90,9 +91,9 @@ jobs:
 
             APP_DIR=~/bevar-ukraine-smart-email-handler-AK
 
-            # First deploy: clone repo
+            # First deploy: clone repo via HTTPS (no SSH key needed)
             if [ ! -d "$APP_DIR" ]; then
-              git clone git@github.com:VectoraAI/bevar-ukraine-smart-email-handler-AK.git "$APP_DIR"
+              git clone https://github.com/VectoraAI/bevar-ukraine-smart-email-handler-AK.git "$APP_DIR"
             fi
 
             cd "$APP_DIR"
