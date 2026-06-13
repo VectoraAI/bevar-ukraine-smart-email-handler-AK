@@ -15,17 +15,27 @@
         .stat-card .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--bu-blue); }
         #queryInput { border-radius: 25px; padding: 12px 24px; font-size: 1.1rem; }
         .email-detail-modal .modal-body { max-height: 70vh; overflow-y: auto; }
-        .typing-indicator { display: none; }
-        .typing-indicator.active { display: inline-flex; gap: 4px; align-items: center; }
-        .typing-indicator span { width: 8px; height: 8px; background: var(--bu-blue);
-            border-radius: 50%; animation: blink 1.4s infinite; }
-        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes blink { 0%,80%,100% { opacity: 0.3; } 40% { opacity: 1; } }
         .clarification-card { background: #fff3cd; border: 1px solid #ffc107; border-radius: 12px; }
         .chart-container { position: relative; height: 350px; }
         .fade-in { animation: fadeIn 0.3s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+        /* Agent Progress */
+        .agent-progress { max-width: 600px; margin: 0 auto; }
+        .agent-step { display: flex; align-items: center; padding: 6px 12px; margin-bottom: 4px;
+                      border-radius: 8px; font-size: 0.9rem; color: #6c757d; transition: all 0.3s; }
+        .agent-step.active { background: #e7f1ff; color: var(--bu-blue); font-weight: 500; }
+        .agent-step.done { color: #198754; }
+        .agent-step .agent-icon { width: 28px; text-align: center; margin-right: 10px; font-size: 1.1rem; }
+        .agent-step .spinner-border { width: 16px; height: 16px; border-width: 2px; }
+        .agent-step .agent-name { flex: 1; }
+        .agent-step .agent-time { font-size: 0.75rem; color: #adb5bd; min-width: 40px; text-align: right; }
+
+        /* Response text markdown */
+        #responseText p { margin-bottom: 0.5rem; }
+        #responseText ul, #responseText ol { margin-bottom: 0.5rem; }
+        .email-link { text-decoration: none; color: var(--bu-blue); }
+        .email-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -59,11 +69,16 @@
                         <i class="bi bi-search me-1"></i> Search
                     </button>
                 </div>
-                <div class="mt-2 text-muted small text-center">
-                    <span class="typing-indicator" id="typingIndicator">
-                        <span></span><span></span><span></span>
-                        <span class="ms-2">Analyzing...</span>
-                    </span>
+            </div>
+        </div>
+
+        <!-- Agent Progress Panel -->
+        <div id="agentProgress" class="row justify-content-center mb-4" style="display:none;">
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body py-3">
+                        <div class="agent-progress" id="agentSteps"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -73,7 +88,7 @@
             <div class="col-md-3 mb-3">
                 <div class="card stat-card h-100">
                     <div class="card-body text-center">
-                        <div class="stat-value">{{ stats.get('total_emails', 0) }}</div>
+                        <div class="stat-value">{{ "{:,}".format(stats.get('total_emails', 0)) }}</div>
                         <div class="text-muted">Total Emails</div>
                     </div>
                 </div>
@@ -81,7 +96,7 @@
             <div class="col-md-3 mb-3">
                 <div class="card stat-card h-100">
                     <div class="card-body text-center">
-                        <div class="stat-value">{{ stats.get('unique_senders', 0) }}</div>
+                        <div class="stat-value">{{ "{:,}".format(stats.get('unique_senders', 0)) }}</div>
                         <div class="text-muted">Unique Senders</div>
                     </div>
                 </div>
@@ -89,7 +104,7 @@
             <div class="col-md-3 mb-3">
                 <div class="card stat-card h-100">
                     <div class="card-body text-center">
-                        <div class="stat-value">{{ stats.get('with_attachments', 0) }}</div>
+                        <div class="stat-value">{{ "{:,}".format(stats.get('with_attachments', 0)) }}</div>
                         <div class="text-muted">With Attachments</div>
                     </div>
                 </div>
@@ -179,6 +194,89 @@
         const pageSize = 50;
         let chartInstances = [];
 
+        // Agent pipeline steps
+        const AGENT_STEPS = [
+            { id: 'intent',        icon: 'bi-brain',          name: 'Intent Agent',        desc: 'Analyzing query intent...' },
+            { id: 'clarification', icon: 'bi-question-circle', name: 'Clarification Agent', desc: 'Checking if query needs clarification...' },
+            { id: 'planner',       icon: 'bi-diagram-3',      name: 'Query Planner',       desc: 'Building search strategy...' },
+            { id: 'search',        icon: 'bi-search',         name: 'Search Agent',        desc: 'Searching 41K+ emails in DuckDB...' },
+            { id: 'aggregation',   icon: 'bi-bar-chart',      name: 'Aggregation Agent',   desc: 'Computing statistics...' },
+            { id: 'presentation',  icon: 'bi-table',          name: 'Presentation Agent',  desc: 'Building tables and charts...' },
+            { id: 'composer',      icon: 'bi-pencil-square',  name: 'Response Composer',   desc: 'Writing response via Claude...' },
+        ];
+
+        let stepTimers = [];
+        let progressStartTime = 0;
+
+        function showAgentProgress() {
+            const panel = document.getElementById('agentProgress');
+            const container = document.getElementById('agentSteps');
+            panel.style.display = '';
+
+            container.innerHTML = AGENT_STEPS.map(s =>
+                `<div class="agent-step" id="step-${s.id}">
+                    <div class="agent-icon"><i class="bi ${s.icon}"></i></div>
+                    <div class="agent-name">${s.name} <span class="text-muted small ms-2">${s.desc}</span></div>
+                    <div class="agent-time" id="time-${s.id}"></div>
+                </div>`
+            ).join('');
+
+            progressStartTime = performance.now();
+            stepTimers.forEach(t => clearTimeout(t));
+            stepTimers = [];
+
+            // Animate steps sequentially with realistic delays
+            const delays = [0, 800, 1500, 2200, 3500, 4500, 5500];
+            AGENT_STEPS.forEach((step, i) => {
+                const timer = setTimeout(() => {
+                    // Mark previous as done
+                    if (i > 0) {
+                        const prev = document.getElementById(`step-${AGENT_STEPS[i-1].id}`);
+                        if (prev) {
+                            prev.classList.remove('active');
+                            prev.classList.add('done');
+                            const prevIcon = prev.querySelector('.agent-icon');
+                            prevIcon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+                            const elapsed = ((performance.now() - progressStartTime) / 1000).toFixed(1);
+                            document.getElementById(`time-${AGENT_STEPS[i-1].id}`).textContent = elapsed + 's';
+                        }
+                    }
+                    // Mark current as active
+                    const el = document.getElementById(`step-${step.id}`);
+                    if (el) {
+                        el.classList.add('active');
+                        const icon = el.querySelector('.agent-icon');
+                        icon.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+                    }
+                }, delays[i]);
+                stepTimers.push(timer);
+            });
+        }
+
+        function finishAgentProgress() {
+            stepTimers.forEach(t => clearTimeout(t));
+            stepTimers = [];
+            const totalTime = ((performance.now() - progressStartTime) / 1000).toFixed(1);
+
+            AGENT_STEPS.forEach(step => {
+                const el = document.getElementById(`step-${step.id}`);
+                if (el) {
+                    el.classList.remove('active');
+                    el.classList.add('done');
+                    const icon = el.querySelector('.agent-icon');
+                    icon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+                }
+            });
+
+            const lastStep = AGENT_STEPS[AGENT_STEPS.length - 1];
+            document.getElementById(`time-${lastStep.id}`).textContent = totalTime + 's';
+
+            // Fade out after a moment
+            setTimeout(() => {
+                document.getElementById('agentProgress').style.display = 'none';
+            }, 1000);
+        }
+
         document.getElementById('queryInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') submitQuery();
         });
@@ -192,6 +290,7 @@
             currentPage = page || 1;
             setLoading(true);
             hideAll();
+            showAgentProgress();
 
             try {
                 const resp = await fetch('/api/query', {
@@ -205,12 +304,36 @@
                     })
                 });
                 const data = await resp.json();
+                finishAgentProgress();
                 renderResponse(data);
             } catch (err) {
+                finishAgentProgress();
                 showError('Connection error. Please try again.');
             } finally {
                 setLoading(false);
             }
+        }
+
+        function renderMarkdown(text) {
+            if (!text) return '';
+            // Bold: **text**
+            let html = escapeHtml(text);
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            // Italic: *text* (but not inside **)
+            html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+            // Inline code: `text`
+            html = html.replace(/`(.+?)`/g, '<code>$1</code>');
+            // Lists: - item
+            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+            // Newlines
+            html = html.replace(/\n/g, '<br>');
+            // Clean up
+            html = html.replace(/<br><ul>/g, '<ul>');
+            html = html.replace(/<\/ul><br>/g, '</ul>');
+            html = html.replace(/<br><li>/g, '<li>');
+            html = html.replace(/<\/li><br>/g, '</li>');
+            return html;
         }
 
         function renderResponse(data) {
@@ -224,10 +347,9 @@
             const area = document.getElementById('responseArea');
             area.style.display = '';
 
-            // Text
+            // Text (render as markdown)
             if (data.text) {
-                document.getElementById('responseText').innerHTML =
-                    '<p class="mb-0">' + escapeHtml(data.text).replace(/\n/g, '<br>') + '</p>';
+                document.getElementById('responseText').innerHTML = renderMarkdown(data.text);
             }
 
             const pres = data.presentation;
@@ -290,10 +412,11 @@
         }
 
         function bindTableEvents() {
-            document.querySelectorAll('.view-email').forEach(btn => {
-                btn.addEventListener('click', async function(e) {
+            document.querySelectorAll('.email-link').forEach(link => {
+                link.addEventListener('click', async function(e) {
                     e.preventDefault();
                     const mid = this.dataset.messageId;
+                    if (!mid) return;
                     const resp = await fetch(`/api/email/${encodeURIComponent(mid)}`);
                     const data = await resp.json();
                     if (data.email) showEmailModal(data.email);
@@ -378,8 +501,6 @@
         }
 
         async function showStats() {
-            const resp = await fetch('/api/timeline');
-            const data = await resp.json();
             document.getElementById('queryInput').value = 'Show email statistics and timeline';
             submitQuery();
         }
@@ -389,10 +510,7 @@
         }
 
         function setLoading(state) {
-            const indicator = document.getElementById('typingIndicator');
-            const btn = document.getElementById('searchBtn');
-            indicator.classList.toggle('active', state);
-            btn.disabled = state;
+            document.getElementById('searchBtn').disabled = state;
         }
 
         function hideAll() {
@@ -401,6 +519,7 @@
             document.getElementById('queryStatsCards').style.display = 'none';
             document.getElementById('chartsArea').style.display = 'none';
             document.getElementById('tableArea').style.display = 'none';
+            document.getElementById('agentProgress').style.display = 'none';
         }
 
         function showError(msg) {
@@ -411,7 +530,7 @@
 
         function escapeHtml(str) {
             const div = document.createElement('div');
-            div.textContent = str;
+            div.textContent = String(str);
             return div.innerHTML;
         }
     </script>
