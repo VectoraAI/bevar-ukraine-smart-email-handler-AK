@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from src.config.logging import get_logger
 from src.llm.client import get_bedrock_client, get_model_id, is_llm_available
@@ -35,7 +36,7 @@ def compose_response(
     user_query: str,
     search_result: SearchResult | None = None,
     aggregation: AggregationResult | None = None,
-    archive_stats: dict | None = None,
+    archive_stats: dict[str, Any] | None = None,
 ) -> str:
     """Compose warm, human response text."""
 

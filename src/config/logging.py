@@ -34,4 +34,4 @@ def setup_logging() -> None:
 
 
 def get_logger(**kwargs: Any) -> structlog.stdlib.BoundLogger:
-    return structlog.get_logger(**kwargs)  # type: ignore[return-value]
+    return structlog.get_logger(**kwargs)  # type: ignore[no-any-return]

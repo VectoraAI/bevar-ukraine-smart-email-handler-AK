@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from src.agents.data_access_agent import DataAccessAgent
 from src.config.logging import get_logger
 from src.models.agents import QueryPlan, SearchResult
@@ -22,8 +24,8 @@ class SearchAgent:
         )
         return result
 
-    def get_email_detail(self, message_id: str) -> dict | None:
+    def get_email_detail(self, message_id: str) -> dict[str, Any] | None:
         return self._data.get_full_email(message_id)
 
-    def get_thread(self, thread_id: str) -> list[dict]:
+    def get_thread(self, thread_id: str) -> list[dict[str, Any]]:
         return self._data.get_thread(thread_id)

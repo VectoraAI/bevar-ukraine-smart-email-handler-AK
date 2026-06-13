@@ -86,7 +86,8 @@ class DatabaseManager:
             return self._shared_conn
         if not hasattr(self._local, "conn") or self._local.conn is None:
             self._local.conn = duckdb.connect(self._db_path)
-        return self._local.conn
+        conn: duckdb.DuckDBPyConnection = self._local.conn
+        return conn
 
     @contextmanager
     def connection(self) -> Generator[duckdb.DuckDBPyConnection, None, None]:
@@ -340,7 +341,8 @@ class DatabaseManager:
     def get_total_email_count(self) -> int:
         with self.connection() as conn:
             result = conn.execute("SELECT COUNT(*) FROM emails")
-            return result.fetchone()[0]  # type: ignore[index]
+            row = result.fetchone()
+            return int(row[0]) if row else 0
 
     def get_archive_stats(self) -> dict[str, Any]:
         with self.connection() as conn:

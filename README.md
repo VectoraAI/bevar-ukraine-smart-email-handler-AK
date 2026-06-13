@@ -131,7 +131,7 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 
 # 3. Скопіюйте шаблон конфігурації та заповніть значення
-cp .env.example .env
+cp .env .env
 # Відредагуйте .env — вкажіть AWS credentials (для S3 та Bedrock)
 
 # 4. Запустіть первинну ингестію архіву з S3

@@ -58,9 +58,9 @@ async def index(request: Request) -> HTMLResponse:
     stats = db.get_archive_stats()
     manifest = db.get_manifest()
     return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
+        request=request,
+        name="index.html",
+        context={
             "stats": stats,
             "manifest": manifest,
         },

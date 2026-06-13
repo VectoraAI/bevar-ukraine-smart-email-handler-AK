@@ -80,15 +80,15 @@ def _extract_body(msg: email.message.Message) -> tuple[str, str]:
                 if "attachment" in disp:
                     continue
                 try:
-                    payload = part.get_payload(decode=True)
-                    if payload is None:
+                    raw_payload = part.get_payload(decode=True)
+                    if not isinstance(raw_payload, bytes):
                         continue
                     charset = part.get_content_charset() or "utf-8"
                     try:
-                        decoded = payload.decode(charset, errors="replace")
+                        decoded = raw_payload.decode(charset, errors="replace")
                     except (LookupError, UnicodeDecodeError):
-                        result = from_bytes(payload)
-                        decoded = str(result.best()) if result.best() else payload.decode("utf-8", errors="replace")
+                        result = from_bytes(raw_payload)
+                        decoded = str(result.best()) if result.best() else raw_payload.decode("utf-8", errors="replace")
 
                     if ct == "text/plain" and not text_body:
                         text_body = decoded
@@ -97,14 +97,14 @@ def _extract_body(msg: email.message.Message) -> tuple[str, str]:
                 except Exception:
                     continue
         else:
-            payload = msg.get_payload(decode=True)
-            if payload:
+            raw_payload = msg.get_payload(decode=True)
+            if isinstance(raw_payload, bytes):
                 charset = msg.get_content_charset() or "utf-8"
                 try:
-                    decoded = payload.decode(charset, errors="replace")
+                    decoded = raw_payload.decode(charset, errors="replace")
                 except (LookupError, UnicodeDecodeError):
-                    result = from_bytes(payload)
-                    decoded = str(result.best()) if result.best() else payload.decode("utf-8", errors="replace")
+                    result = from_bytes(raw_payload)
+                    decoded = str(result.best()) if result.best() else raw_payload.decode("utf-8", errors="replace")
                 if msg.get_content_type() == "text/html":
                     html_body = decoded
                 else:
