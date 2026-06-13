@@ -253,7 +253,7 @@ class DatabaseManager:
             data_sql = f"""
                 SELECT message_id, date_utc, from_address, from_name,
                        to_addresses, subject, has_attachments, attachment_count,
-                       size_bytes, LEFT(body_text, 200) as snippet
+                       size_bytes, thread_id, LEFT(body_text, 200) as snippet
                 FROM emails {where_sql}
                 ORDER BY {order_by}
                 LIMIT {page_size} OFFSET {offset}
