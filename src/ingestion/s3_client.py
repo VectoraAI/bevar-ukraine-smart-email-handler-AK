@@ -23,8 +23,8 @@ class S3Client:
             "region_name": settings.aws_region,
             "config": Config(
                 retries={"max_attempts": _MAX_RETRIES, "mode": "adaptive"},
-                connect_timeout=10,
-                read_timeout=60,
+                connect_timeout=30,
+                read_timeout=300,
             ),
         }
         if settings.aws_access_key_id:

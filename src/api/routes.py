@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -8,6 +9,9 @@ from src.agents.orchestrator import Orchestrator
 from src.storage.database import get_database
 
 router = APIRouter()
+
+_ingestion_lock = threading.Lock()
+_ingestion_status: dict[str, Any] = {"running": False}
 
 
 def get_orchestrator() -> Orchestrator:
@@ -119,35 +123,51 @@ async def ingestion_status() -> dict[str, Any]:
     """Get current ingestion status."""
     db = get_database()
     manifest = db.get_manifest()
+    result: dict[str, Any] = {"running": _ingestion_status["running"]}
+    if _ingestion_status.get("error"):
+        result["error"] = _ingestion_status["error"]
     if not manifest:
-        return {"status": "not_started", "total_messages": 0}
-    return {
-        "status": "completed" if manifest.completed else "in_progress",
-        "total_messages": manifest.total_messages,
-        "error_count": manifest.error_count,
-        "s3_etag": manifest.s3_etag,
-        "last_modified": manifest.s3_last_modified,
-    }
+        result["status"] = "not_started"
+        result["total_messages"] = 0
+    else:
+        result["status"] = "completed" if manifest.completed else "in_progress"
+        result["total_messages"] = manifest.total_messages
+        result["error_count"] = manifest.error_count
+        result["s3_etag"] = manifest.s3_etag
+    return result
 
 
 @router.post("/api/ingestion/trigger")
 async def trigger_ingestion(request: Request) -> dict[str, Any]:
-    """Trigger ingestion from S3 (admin endpoint)."""
+    """Trigger ingestion from S3 in a background thread."""
     from src.ingestion.pipeline import IngestionPipeline
     from src.ingestion.s3_client import S3Client
+
+    if _ingestion_status["running"]:
+        return {"status": "already_running", "progress": _ingestion_status.get("progress", {})}
 
     body = await request.json() if request.headers.get("content-type") == "application/json" else {}
     force = body.get("force", False)
 
-    db = get_database()
-    try:
-        s3 = S3Client()
-        pipeline = IngestionPipeline(db, s3)
-        manifest = pipeline.run(force=force)
-        return {
-            "status": "completed",
-            "total_messages": manifest.total_messages,
-            "error_count": manifest.error_count,
-        }
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+    def _run_ingestion() -> None:
+        with _ingestion_lock:
+            _ingestion_status["running"] = True
+            _ingestion_status["error"] = None
+            try:
+                db = get_database()
+                s3 = S3Client()
+                pipeline = IngestionPipeline(db, s3)
+                manifest = pipeline.run(force=force)
+                _ingestion_status["progress"] = {
+                    "total_messages": manifest.total_messages,
+                    "error_count": manifest.error_count,
+                    "completed": manifest.completed,
+                }
+            except Exception as e:
+                _ingestion_status["error"] = str(e)
+            finally:
+                _ingestion_status["running"] = False
+
+    thread = threading.Thread(target=_run_ingestion, daemon=True)
+    thread.start()
+    return {"status": "started", "message": "Ingestion running in background. Check /api/ingestion/status"}
